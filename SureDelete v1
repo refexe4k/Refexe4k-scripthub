@@ -1,0 +1,183 @@
+-- LocalScript | StarterPlayerScripts
+-- SAFE CLIENT-ONLY VERSION (Function unchanged)
+
+-- ================= SERVICES =================
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+-- ================= PLAYER =================
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+-- ================= GUI =================
+local gui = Instance.new("ScreenGui")
+gui.Name = "DeleteToolGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Confirm Frame
+local confirmGui = Instance.new("Frame")
+confirmGui.Size = UDim2.fromScale(0.25, 0.18)
+confirmGui.Position = UDim2.fromScale(0.02, 0.4)
+confirmGui.BackgroundColor3 = Color3.fromRGB(25,25,25)
+confirmGui.Visible = false
+confirmGui.Parent = gui
+
+Instance.new("UICorner", confirmGui).CornerRadius = UDim.new(0,10)
+
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = Color3.fromRGB(255,255,255)
+frameStroke.Thickness = 2
+frameStroke.Parent = confirmGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.fromScale(1, 0.35)
+title.Text = "Are you sure?"
+title.TextScaled = true
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.new(1,1,1)
+title.Parent = confirmGui
+
+-- ================= BUTTON FUNCTION =================
+local function createButton(parent, size, position, bgColor, text)
+	local btn = Instance.new("TextButton")
+	btn.Size = size
+	btn.Position = position
+	btn.BackgroundTransparency = 1
+	btn.Text = ""
+	btn.AutoButtonColor = false
+	btn.Parent = parent
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.fromScale(1,1)
+	bg.BackgroundColor3 = bgColor
+	bg.Parent = btn
+
+	Instance.new("UICorner", bg).CornerRadius = UDim.new(0,10)
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255,255,255)
+	stroke.Thickness = 2
+	stroke.Parent = bg
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1,1)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextScaled = true
+	label.TextColor3 = Color3.new(1,1,1)
+	label.Parent = btn
+
+	return btn
+end
+
+local cancelBtn = createButton(
+	confirmGui,
+	UDim2.fromScale(0.45,0.35),
+	UDim2.fromScale(0.03,0.55),
+	Color3.fromRGB(200,0,0),
+	"CANCEL"
+)
+
+local sureBtn = createButton(
+	confirmGui,
+	UDim2.fromScale(0.45,0.35),
+	UDim2.fromScale(0.52,0.55),
+	Color3.fromRGB(0,200,0),
+	"SURE"
+)
+
+-- ================= VARIABLES =================
+local tool
+local selectedTarget
+local originalColors = {}
+local holdingTool = false
+local inputDebounce = false
+
+-- ================= CREATE TOOL =================
+local function createTool()
+	if tool then return end
+	tool = Instance.new("Tool")
+	tool.Name = "DELETE"
+	tool.RequiresHandle = false
+	tool.Parent = player:WaitForChild("Backpack")
+end
+
+createTool()
+
+-- ================= RESET =================
+local function resetTarget()
+	if selectedTarget and originalColors[selectedTarget] then
+		pcall(function()
+			selectedTarget.Color = originalColors[selectedTarget]
+		end)
+	end
+	selectedTarget = nil
+	confirmGui.Visible = false
+end
+
+tool.Equipped:Connect(function()
+	holdingTool = true
+end)
+
+tool.Unequipped:Connect(function()
+	holdingTool = false
+	resetTarget()
+end)
+
+-- ================= SAFE RAYCAST (ANDROID) =================
+local function getTargetFromTouch(screenPos)
+	if not camera then return end
+
+	local ray = camera:ScreenPointToRay(screenPos.X, screenPos.Y)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {player.Character}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	params.IgnoreWater = true
+
+	local result = Workspace:Raycast(ray.Origin, ray.Direction * 500, params)
+	if result and result.Instance and result.Instance:IsA("BasePart") then
+		return result.Instance
+	end
+end
+
+-- ================= INPUT =================
+UserInputService.TouchStarted:Connect(function(input, gp)
+	if gp or not holdingTool or inputDebounce then return end
+	inputDebounce = true
+
+	local target = getTargetFromTouch(input.Position)
+	if target then
+		if selectedTarget and selectedTarget ~= target then
+			pcall(function()
+				selectedTarget.Color = originalColors[selectedTarget]
+			end)
+		end
+
+		selectedTarget = target
+		originalColors[target] = originalColors[target] or target.Color
+
+		pcall(function()
+			target.Color = Color3.fromRGB(255,0,0)
+		end)
+
+		confirmGui.Visible = true
+	end
+
+	task.delay(0.15, function()
+		inputDebounce = false
+	end)
+end)
+
+-- ================= BUTTON EVENTS =================
+cancelBtn.MouseButton1Click:Connect(resetTarget)
+
+sureBtn.MouseButton1Click:Connect(function()
+	if selectedTarget then
+		pcall(function()
+			selectedTarget:Destroy()
+		end)
+	end
+	resetTarget()
+end)
