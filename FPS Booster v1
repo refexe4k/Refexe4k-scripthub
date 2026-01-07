@@ -1,0 +1,95 @@
+-- ULTRA LOW MESH DETAIL | FRM KILLER
+-- Delta Executor | Client-side only
+-- NO GUI | AUTO EXECUTE | NO FASTFLAG
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+
+-- ================= LIGHTING MINIMAL =================
+pcall(function()
+	Lighting.GlobalShadows = false
+	Lighting.Brightness = 0
+	Lighting.FogEnd = 9e9
+	Lighting.EnvironmentDiffuseScale = 0
+	Lighting.EnvironmentSpecularScale = 0
+end)
+
+for _, v in ipairs(Lighting:GetChildren()) do
+	if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
+		v:Destroy()
+	end
+end
+
+-- ================= WORLD ULTRA LOW =================
+for _, obj in ipairs(Workspace:GetDescendants()) do
+
+	-- MeshPart (TARGET UTAMA FRM)
+	if obj:IsA("MeshPart") then
+		obj.RenderFidelity = Enum.RenderFidelity.Performance
+		obj.CollisionFidelity = Enum.CollisionFidelity.Box
+		obj.Material = Enum.Material.Plastic
+		obj.Reflectance = 0
+		obj.CastShadow = false
+
+		-- potong visual mesh
+		obj.TextureID = ""
+		obj.Color = Color3.fromRGB(120,120,120)
+
+	-- SpecialMesh (OLD MESH)
+	elseif obj:IsA("SpecialMesh") then
+		obj.MeshType = Enum.MeshType.Brick
+		obj.Scale = Vector3.new(0.5, 0.5, 0.5)
+
+	-- BasePart
+	elseif obj:IsA("BasePart") then
+		obj.Material = Enum.Material.Plastic
+		obj.CastShadow = false
+		obj.Reflectance = 0
+
+	-- TEXTURE / DECAL MATI TOTAL
+	elseif obj:IsA("Decal") or obj:IsA("Texture") then
+		obj.Transparency = 1
+
+	-- EFFECT BERAT
+	elseif obj:IsA("ParticleEmitter")
+	or obj:IsA("Trail")
+	or obj:IsA("Beam")
+	or obj:IsA("Fire")
+	or obj:IsA("Smoke")
+	or obj:IsA("Sparkles") then
+		obj.Enabled = false
+	end
+end
+
+-- ================= CHARACTER ULTRA LOW =================
+local function optimizeChar(char)
+	for _, v in ipairs(char:GetDescendants()) do
+		if v:IsA("MeshPart") then
+			v.RenderFidelity = Enum.RenderFidelity.Performance
+			v.CollisionFidelity = Enum.CollisionFidelity.Box
+			v.Material = Enum.Material.Plastic
+			v.CastShadow = false
+			v.TextureID = ""
+		elseif v:IsA("Decal") or v:IsA("Texture") then
+			v.Transparency = 1
+		elseif v:IsA("BasePart") then
+			v.Material = Enum.Material.Plastic
+			v.CastShadow = false
+		end
+	end
+end
+
+if LocalPlayer.Character then
+	optimizeChar(LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(optimizeChar)
+
+-- ================= QUALITY LEVEL MIN =================
+settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+pcall(function()
+	game:GetService("UserSettings")
+	:GetService("UserGameSettings")
+	.SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+end)
