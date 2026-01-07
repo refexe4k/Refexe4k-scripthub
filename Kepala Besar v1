@@ -1,0 +1,89 @@
+--// Head Enlarger Toggle Insert (Custom Character Support)
+--// Client-side, taruh di StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Config
+local HEAD_SIZE = Vector3.new(5, 5, 5) -- besar kepala
+local HEAD_TRANSPARENCY = 0.7
+local TOGGLE_KEY = Enum.KeyCode.Insert
+
+-- State
+local Enlarged = true
+local OriginalData = {}
+
+-- Set kondisi kepala
+local function setHeadState(player, enlarge)
+    if player == LocalPlayer then return end
+    local char = player.Character
+    if not char then return end
+
+    local head = char:FindFirstChild("Head")
+    if not head or not head:IsA("BasePart") then return end
+    local mesh = head:FindFirstChildOfClass("SpecialMesh")
+
+    -- Simpan data asli sekali saja
+    if not OriginalData[player] then
+        OriginalData[player] = {
+            Size = head.Size,
+            Transparency = head.Transparency,
+            Material = head.Material,
+            Color = head.Color, -- ambil warna asli langsung dari kepala
+            Mesh = mesh and mesh:Clone()
+        }
+    end
+
+    if enlarge then
+        -- Besarkan kepala
+        head.Size = HEAD_SIZE
+        head.Transparency = HEAD_TRANSPARENCY
+        head.Material = Enum.Material.Neon
+        head.Color = Color3.fromRGB(255, 0, 0) -- merah neon
+        if mesh then mesh:Destroy() end -- hapus mesh bawaan agar benar-benar bulat
+    else
+        -- Kembalikan ke warna & bentuk asli
+        local data = OriginalData[player]
+        head.Size = data.Size
+        head.Transparency = data.Transparency
+        head.Material = data.Material
+        head.Color = data.Color
+
+        if not head:FindFirstChildOfClass("SpecialMesh") and data.Mesh then
+            data.Mesh:Clone().Parent = head
+        end
+    end
+
+    head.CanCollide = false
+end
+
+-- Pasang ke semua player lain
+local function onPlayerAdded(player)
+    if player == LocalPlayer then return end
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        setHeadState(player, Enlarged)
+    end)
+    if player.Character then
+        setHeadState(player, Enlarged)
+    end
+end
+
+for _,p in ipairs(Players:GetPlayers()) do
+    onPlayerAdded(p)
+end
+Players.PlayerAdded:Connect(onPlayerAdded)
+
+-- Toggle dengan Insert
+UserInputService.InputBegan:Connect(function(input,gp)
+    if gp then return end
+    if input.KeyCode == TOGGLE_KEY then
+        Enlarged = not Enlarged
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                setHeadState(player, Enlarged)
+            end
+        end
+    end
+end)
