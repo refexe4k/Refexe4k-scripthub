@@ -1,0 +1,163 @@
+-- =========================================
+-- FINAL AIMLOCK (ADAPTIVE CAMERA STRENGTH)
+-- =========================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- ===== CONFIG =====
+local CIRCLE_RADIUS = 150
+local NORMAL_SMOOTH = 0.5   -- saat kamera digerakkan
+local STRONG_SMOOTH = 1   -- saat kamera diam (kuat)
+local MIN_HEAD_PIXEL = 2
+local CAMERA_MOVE_THRESHOLD = 0.002 -- sensitivitas deteksi gerak kamera
+
+-- ===== STATE =====
+local ENABLED = true
+local lastCamLook = Camera.CFrame.LookVector
+
+-- ===== DRAWING =====
+local circle = Drawing.new("Circle")
+circle.Radius = CIRCLE_RADIUS
+circle.Thickness = 2
+circle.NumSides = 120
+circle.Color = Color3.fromRGB(255,255,255)
+circle.Filled = false
+
+local dot = Drawing.new("Circle")
+dot.Radius = 3
+dot.Filled = true
+dot.Color = Color3.fromRGB(255,255,255)
+
+local lines = {}
+
+-- ===== TOGGLE UI (DRAGGABLE) =====
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "AimToggleGUI"
+
+local toggle = Instance.new("Frame", gui)
+toggle.Size = UDim2.fromOffset(110,36)
+toggle.Position = UDim2.fromScale(0.5,0.85)
+toggle.BackgroundColor3 = Color3.fromRGB(25,25,25)
+toggle.BorderSizePixel = 0
+toggle.Active = true
+toggle.Draggable = true
+
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,18)
+
+local text = Instance.new("TextLabel", toggle)
+text.Size = UDim2.fromScale(1,1)
+text.BackgroundTransparency = 1
+text.Font = Enum.Font.GothamBold
+text.TextSize = 14
+text.Text = "AIMLOCK : ON"
+text.TextColor3 = Color3.fromRGB(0,255,0)
+
+toggle.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+		ENABLED = not ENABLED
+		text.Text = ENABLED and "AIMLOCK : ON" or "AIMLOCK : OFF"
+		text.TextColor3 = ENABLED and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
+	end
+end)
+
+-- ===== UTILS =====
+local function center()
+	local v = Camera.ViewportSize
+	return Vector2.new(v.X/2, v.Y/2)
+end
+
+local function isGlassLike(p)
+	if not p or not p:IsA("BasePart") then return false end
+	if p.Material == Enum.Material.Glass then return true end
+	if p.Transparency >= 0.6 then return true end
+	if string.find(p.Name:lower(),"glass") then return true end
+	return false
+end
+
+local function visible(char)
+	local head = char:FindFirstChild("Head")
+	if not head then return false end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	params.FilterDescendantsInstances = {LocalPlayer.Character, char}
+	local r = workspace:Raycast(Camera.CFrame.Position, head.Position - Camera.CFrame.Position, params)
+	return (not r) or isGlassLike(r.Instance)
+end
+
+local function valid(plr)
+	if not plr or not plr.Character then return false end
+	local c = plr.Character
+	local h = c:FindFirstChild("Head")
+	local hum = c:FindFirstChild("Humanoid")
+	if not h or not hum or hum.Health <= 0 then return false end
+	if not visible(c) then return false end
+	local pos, on = Camera:WorldToViewportPoint(h.Position)
+	if not on or pos.Z <= 0 then return false end
+	if (Vector2.new(pos.X,pos.Y)-center()).Magnitude > CIRCLE_RADIUS then return false end
+	local t = Camera:WorldToViewportPoint(h.Position + Vector3.new(0,h.Size.Y/2,0))
+	local b = Camera:WorldToViewportPoint(h.Position - Vector3.new(0,h.Size.Y/2,0))
+	if math.abs(t.Y-b.Y) < MIN_HEAD_PIXEL then return false end
+	return true
+end
+
+-- ===== TARGET =====
+local locked=nil
+local function findBest()
+	local best,bd
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p~=LocalPlayer and valid(p) then
+			local pos = Camera:WorldToViewportPoint(p.Character.Head.Position)
+			local d = (Vector2.new(pos.X,pos.Y)-center()).Magnitude
+			if not best or d<bd then best,bd=p,d end
+		end
+	end
+	return best
+end
+
+-- ===== LOOP =====
+RunService.RenderStepped:Connect(function()
+	if not ENABLED then
+		circle.Visible=false; dot.Visible=false
+		for _,l in pairs(lines) do l.Visible=false end
+		locked=nil
+		return
+	end
+
+	local c = center()
+	circle.Position=c; dot.Position=c
+	circle.Visible=true; dot.Visible=true
+	for _,l in pairs(lines) do l.Visible=false end
+
+	if not valid(locked) then locked=findBest() end
+
+	-- deteksi kamera diam / gerak
+	local curLook = Camera.CFrame.LookVector
+	local camDelta = (curLook - lastCamLook).Magnitude
+	lastCamLook = curLook
+	local smooth = (camDelta < CAMERA_MOVE_THRESHOLD) and STRONG_SMOOTH or NORMAL_SMOOTH
+
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p~=LocalPlayer and valid(p) then
+			lines[p]=lines[p] or Drawing.new("Line")
+			lines[p].Thickness=1
+			local h=p.Character.Head
+			local aimPos=h.Position + h.CFrame.UpVector*0.45
+			local vp=Camera:WorldToViewportPoint(aimPos)
+			lines[p].From=c
+			lines[p].To=Vector2.new(vp.X,vp.Y)
+			lines[p].Visible=true
+
+			if p==locked then
+				lines[p].Color=Color3.fromRGB(255,255,255)
+				local cam=Camera.CFrame
+				Camera.CFrame = cam:Lerp(CFrame.new(cam.Position,aimPos), smooth)
+			else
+				lines[p].Color=Color3.fromRGB(255,0,0)
+			end
+		end
+	end
+end)
